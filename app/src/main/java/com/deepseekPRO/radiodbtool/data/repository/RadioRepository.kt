@@ -32,12 +32,14 @@ class RadioRepository(private val apiClient: ApiClient, private val db: RadioDat
 
     suspend fun fetchStationPage(
         offset: Int,
+        limit: Int = 500,
         country: String? = null,
         language: String? = null,
         name: String? = null
     ): List<StationEntity> {
         return withContext(Dispatchers.IO) {
             val dtos = apiClient.apiService.getStations(
+                limit = limit,
                 offset = offset,
                 country = if (country.isNullOrEmpty()) null else country,
                 language = if (language.isNullOrEmpty()) null else language,

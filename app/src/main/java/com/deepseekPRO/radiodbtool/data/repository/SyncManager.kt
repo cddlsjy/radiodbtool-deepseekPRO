@@ -3,6 +3,7 @@ package com.deepseekPRO.radiodbtool.data.repository
 import com.deepseekPRO.radiodbtool.data.local.RadioDatabase
 import com.deepseekPRO.radiodbtool.data.local.entity.SyncProgressEntity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
@@ -15,29 +16,35 @@ class SyncManager(private val repository: RadioRepository, private val db: Radio
     suspend fun syncFull(onProgress: (Int, Int, String) -> Unit) {
         withContext(Dispatchers.IO) {
             val total = repository.fetchStats()
+            if (total == 0) {
+                onProgress(0, 0, "无法获取电台总数")
+                return@withContext
+            }
+            
             val savedOffset = db.syncProgressDao().getOffset(FULL_SYNC_KEY) ?: 0
             
             if (savedOffset >= total) {
-                onProgress(total, total, "同步已完成")
+                onProgress(total, total, "数据已是最新")
                 db.syncProgressDao().deleteProgress(FULL_SYNC_KEY)
                 return@withContext
             }
 
             var offset = savedOffset
-            while (isActive && offset < total) {
-                val stations = repository.fetchStationPage(offset = offset)
+            while (offset < total && isActive) {
+                val stations = repository.fetchStationPage(offset = offset, limit = PAGE_SIZE)
                 if (stations.isEmpty()) break
 
                 repository.insertStations(stations)
                 offset += stations.size
                 db.syncProgressDao().saveProgress(SyncProgressEntity(FULL_SYNC_KEY, offset))
                 
-                onProgress(offset, total, "已下载 ${offset.coerceAtMost(total)} / $total 条")
+                onProgress(offset, total, "已下载 ${offset.coerceAtMost(total)} / $total")
 
-                if (stations.size < PAGE_SIZE) break
+                delay(50)
             }
 
             db.syncProgressDao().deleteProgress(FULL_SYNC_KEY)
+            onProgress(total, total, "全量同步完成")
         }
     }
 

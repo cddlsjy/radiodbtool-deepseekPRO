@@ -104,6 +104,8 @@ class MainViewModel(private val db: RadioDatabase) : ViewModel() {
                     showToast("条件同步完成")
                 }
                 refreshLocalDropdowns()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _uiState.value = _uiState.value.copy(syncMessage = "已取消")
             } catch (e: Exception) {
                 showToast("同步失败: ${e.message}")
             } finally {

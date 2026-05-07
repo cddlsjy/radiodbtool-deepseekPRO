@@ -33,70 +33,76 @@ object FileSaver {
     }
 
     private fun exportM3U(stations: List<StationEntity>, uri: Uri, context: Context) {
-        val content = StringBuilder().apply {
+        val content = buildString {
             append("#EXTM3U\n\n")
             stations.forEach { station ->
-                append("#RADIOBROWSERUUID:${station.stationuuid}\n")
-                append("#EXTINF:-1,${station.name ?: "Unknown"}\n")
-                station.favicon?.let { append("#EXTIMG:$it\n") }
-                append("${station.url ?: ""}\n\n")
+                if (!station.url.isNullOrEmpty()) {
+                    append("#EXTINF:-1,${station.name?.replace("\n", "") ?: "Unknown"}\n")
+                    station.favicon?.let { append("#EXTIMG:$it\n") }
+                    append("${station.url}\n")
+                    append("#RADIOBROWSERUUID:${station.stationuuid}\n\n")
+                }
             }
-        }.toString()
+        }
         writeToFile(content, uri, context)
     }
 
     private fun exportCSV(stations: List<StationEntity>, uri: Uri, context: Context) {
-        val content = StringBuilder().apply {
-            append("stationuuid,name,url,homepage,favicon,country,countrycode,state,language,tags,codec,bitrate,lastcheckok,lastchangetime,clickcount,clicktrend,votes\n")
-            stations.forEach { station ->
-                append("${escapeCSV(station.stationuuid)},")
-                append("${escapeCSV(station.name)},")
-                append("${escapeCSV(station.url)},")
-                append("${escapeCSV(station.homepage)},")
-                append("${escapeCSV(station.favicon)},")
-                append("${escapeCSV(station.country)},")
-                append("${escapeCSV(station.countrycode)},")
-                append("${escapeCSV(station.state)},")
-                append("${escapeCSV(station.language)},")
-                append("${escapeCSV(station.tags)},")
-                append("${escapeCSV(station.codec)},")
-                append("${station.bitrate},")
-                append("${station.lastcheckok},")
-                append("${escapeCSV(station.lastchangetime)},")
-                append("${station.clickcount},")
-                append("${station.clicktrend},")
-                append("${station.votes}\n")
+        val headers = listOf("stationuuid", "name", "url", "homepage", "favicon", "country", "countrycode", "state", "language", "tags", "codec", "bitrate", "lastcheckok", "lastchangetime", "clickcount", "clicktrend", "votes")
+        val out = StringBuilder()
+        out.append(headers.joinToString(",")).append("\n")
+        for (s in stations) {
+            val row = headers.map { header ->
+                val value = when (header) {
+                    "stationuuid" -> s.stationuuid
+                    "name" -> s.name
+                    "url" -> s.url
+                    "homepage" -> s.homepage
+                    "favicon" -> s.favicon
+                    "country" -> s.country
+                    "countrycode" -> s.countrycode
+                    "state" -> s.state
+                    "language" -> s.language
+                    "tags" -> s.tags
+                    "codec" -> s.codec
+                    "bitrate" -> s.bitrate?.toString()
+                    "lastcheckok" -> s.lastcheckok?.toString()
+                    "lastchangetime" -> s.lastchangetime
+                    "clickcount" -> s.clickcount?.toString()
+                    "clicktrend" -> s.clicktrend?.toString()
+                    "votes" -> s.votes?.toString()
+                    else -> ""
+                }
+                escapeCsv(value)
             }
-        }.toString()
-        writeToFile(content, uri, context)
+            out.append(row.joinToString(",")).append("\n")
+        }
+        writeToFile(out.toString(), uri, context)
+    }
+
+    private fun escapeCsv(value: String?): String {
+        if (value.isNullOrEmpty()) return ""
+        return if (value.contains(",") || value.contains("\n") || value.contains("\"")) {
+            "\"" + value.replace("\"", "\"\"") + "\""
+        } else value
     }
 
     private fun exportJSON(stations: List<StationEntity>, uri: Uri, context: Context) {
-        val gson = Gson()
-        val content = gson.toJson(stations)
+        val content = Gson().toJson(stations)
         writeToFile(content, uri, context)
     }
 
     private fun exportDB(stations: List<StationEntity>, uri: Uri, context: Context) {
-        val tempFile = File(context.cacheDir, "temp_radio.db")
-        if (tempFile.exists()) {
-            tempFile.delete()
-        }
-
-        val tempDb = Room.databaseBuilder(
-            context,
-            RadioDatabase::class.java,
-            tempFile.name
-        ).build()
-
+        val tempFile = File(context.cacheDir, "temp_export_${System.currentTimeMillis()}.db")
+        val tempDb = Room.databaseBuilder(context, RadioDatabase::class.java, tempFile.absolutePath)
+            .build()
         try {
             runBlocking {
                 tempDb.stationDao().insertStations(stations)
             }
             tempDb.close()
-
-            FileInputStream(tempFile).use { input ->
-                context.contentResolver.openOutputStream(uri)?.use { output ->
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                FileInputStream(tempFile).use { input ->
                     input.copyTo(output)
                 }
             }
@@ -110,11 +116,6 @@ object FileSaver {
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
             outputStream.write(content.toByteArray())
         }
-    }
-
-    private fun escapeCSV(value: String?): String {
-        val escaped = value?.replace("\"", "\"\"") ?: ""
-        return "\"$escaped\""
     }
 
     private fun <T> runBlocking(block: suspend () -> T): T {
