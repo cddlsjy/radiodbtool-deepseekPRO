@@ -19,7 +19,6 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.room.Room
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -200,12 +199,48 @@ class MainViewModel(private val db: RadioDatabase) : ViewModel() {
                     }
                 }
 
-                val importDb = Room.databaseBuilder(context, RadioDatabase::class.java, tempFile.absolutePath)
-                    .allowMainThreadQueries()
-                    .build()
+                val importDb = android.database.sqlite.SQLiteDatabase.openDatabase(
+                    tempFile.absolutePath,
+                    null,
+                    android.database.sqlite.SQLiteDatabase.OPEN_READONLY
+                )
 
                 try {
-                    val stations = importDb.stationDao().getStationsPage(Int.MAX_VALUE, 0)
+                    val cursor = importDb.query(
+                        "stations",
+                        arrayOf("stationuuid", "name", "url", "homepage", "favicon", "country", "countrycode", "state", "language", "tags", "codec", "bitrate", "lastcheckok", "lastchangetime", "clickcount", "clicktrend", "votes"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                    )
+
+                    val stations = mutableListOf<StationEntity>()
+                    while (cursor.moveToNext()) {
+                        val station = StationEntity(
+                            stationuuid = cursor.getString(cursor.getColumnIndexOrThrow("stationuuid")),
+                            name = cursor.getString(cursor.getColumnIndex("name")),
+                            url = cursor.getString(cursor.getColumnIndex("url")),
+                            homepage = cursor.getString(cursor.getColumnIndex("homepage")),
+                            favicon = cursor.getString(cursor.getColumnIndex("favicon")),
+                            country = cursor.getString(cursor.getColumnIndex("country")),
+                            countrycode = cursor.getString(cursor.getColumnIndex("countrycode")),
+                            state = cursor.getString(cursor.getColumnIndex("state")),
+                            language = cursor.getString(cursor.getColumnIndex("language")),
+                            tags = cursor.getString(cursor.getColumnIndex("tags")),
+                            codec = cursor.getString(cursor.getColumnIndex("codec")),
+                            bitrate = if (cursor.getColumnIndex("bitrate") >= 0) cursor.getInt(cursor.getColumnIndex("bitrate")) else null,
+                            lastcheckok = if (cursor.getColumnIndex("lastcheckok") >= 0) cursor.getInt(cursor.getColumnIndex("lastcheckok")) else null,
+                            lastchangetime = cursor.getString(cursor.getColumnIndex("lastchangetime")),
+                            clickcount = if (cursor.getColumnIndex("clickcount") >= 0) cursor.getInt(cursor.getColumnIndex("clickcount")) else null,
+                            clicktrend = if (cursor.getColumnIndex("clicktrend") >= 0) cursor.getInt(cursor.getColumnIndex("clicktrend")) else null,
+                            votes = if (cursor.getColumnIndex("votes") >= 0) cursor.getInt(cursor.getColumnIndex("votes")) else null
+                        )
+                        stations.add(station)
+                    }
+                    cursor.close()
+
                     if (stations.isNotEmpty()) {
                         repository.insertStations(stations)
                         showToast("成功导入 ${stations.size} 条电台数据")
