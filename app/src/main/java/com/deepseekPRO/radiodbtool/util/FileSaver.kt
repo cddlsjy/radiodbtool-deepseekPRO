@@ -13,7 +13,6 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
-import java.io.OutputStream
 
 object FileSaver {
     fun exportStations(viewModel: MainViewModel, format: ExportFormat, uri: Uri, context: Context) {
@@ -93,22 +92,31 @@ object FileSaver {
     }
 
     private fun exportDB(stations: List<StationEntity>, uri: Uri, context: Context) {
-        val tempFile = File(context.cacheDir, "temp_export_${System.currentTimeMillis()}.db")
-        val tempDb = Room.databaseBuilder(context, RadioDatabase::class.java, tempFile.absolutePath)
-            .build()
-        try {
-            runBlocking {
-                tempDb.stationDao().insertStations(stations)
-            }
-            tempDb.close()
+        val dbFile = context.getDatabasePath("radio_database")
+        if (dbFile.exists()) {
             context.contentResolver.openOutputStream(uri)?.use { output ->
-                FileInputStream(tempFile).use { input ->
+                FileInputStream(dbFile).use { input ->
                     input.copyTo(output)
                 }
             }
-        } finally {
-            tempDb.close()
-            tempFile.delete()
+        } else {
+            val tempFile = File(context.cacheDir, "temp_export_${System.currentTimeMillis()}.db")
+            val tempDb = Room.databaseBuilder(context, RadioDatabase::class.java, tempFile.absolutePath)
+                .build()
+            try {
+                kotlinx.coroutines.runBlocking {
+                    tempDb.stationDao().insertStations(stations)
+                }
+                tempDb.close()
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    FileInputStream(tempFile).use { input ->
+                        input.copyTo(output)
+                    }
+                }
+            } finally {
+                tempDb.close()
+                tempFile.delete()
+            }
         }
     }
 
@@ -116,9 +124,5 @@ object FileSaver {
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
             outputStream.write(content.toByteArray())
         }
-    }
-
-    private fun <T> runBlocking(block: suspend () -> T): T {
-        return kotlinx.coroutines.runBlocking { block() }
     }
 }
