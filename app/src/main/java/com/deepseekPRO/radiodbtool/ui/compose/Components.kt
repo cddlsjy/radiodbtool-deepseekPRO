@@ -316,7 +316,7 @@ fun StationPreviewList(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
             if (stations.isEmpty()) {
-                Text(text = "暂无数据，请先同步电台")
+                Text(text = "暂无数据，请先同步电台或导入数据库")
             } else {
                 Column {
                     Row(
@@ -347,6 +347,38 @@ fun StationPreviewList(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun ImportSection(
+    isImporting: Boolean,
+    onImport: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "导入数据库",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            Button(
+                onClick = onImport,
+                enabled = !isImporting,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isImporting) "正在导入..." else "从本地DB文件导入")
+            }
+            Text(
+                text = "支持导入 SQLite 数据库文件（.db格式）",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }

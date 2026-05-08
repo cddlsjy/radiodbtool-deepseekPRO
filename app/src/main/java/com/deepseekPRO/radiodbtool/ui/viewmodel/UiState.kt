@@ -22,7 +22,9 @@ data class UiState(
     val localLanguages: List<String> = emptyList(),
     val loadingLists: Boolean = true,
     val listsError: String? = null,
-    val toastMessage: String? = null
+    val toastMessage: String? = null,
+    val importDbPath: String = "",
+    val isImporting: Boolean = false
 )
 
 enum class SyncMode {

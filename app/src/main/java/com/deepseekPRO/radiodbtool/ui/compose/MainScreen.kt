@@ -53,16 +53,11 @@ fun MainScreen() {
         }
     }
     
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-        val hasPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED
-        
-        if (!hasPermission) {
-            LaunchedEffect(Unit) {
-                showPermissionDialogState.value = true
-            }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            viewModel.importFromDbFile(context, it)
         }
     }
     
@@ -152,8 +147,26 @@ fun MainScreen() {
                         viewModel.setExportFormat(exportFormat)
                     },
                     onExport = {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                            ) == PackageManager.PERMISSION_GRANTED
+                            
+                            if (!hasPermission) {
+                                showPermissionDialogState.value = true
+                                return@ExportSection
+                            }
+                        }
                         val fileName = "radio_stations.${uiState.value.exportFormat.extension}"
                         exportLauncher.launch(fileName)
+                    }
+                )
+                
+                ImportSection(
+                    isImporting = uiState.value.isImporting,
+                    onImport = {
+                        importLauncher.launch(arrayOf("application/x-sqlite3", "application/octet-stream"))
                     }
                 )
                 

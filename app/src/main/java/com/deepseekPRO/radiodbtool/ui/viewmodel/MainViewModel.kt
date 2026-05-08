@@ -15,6 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.content.Context
+import android.database.Cursor
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.room.Room
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 class MainViewModel(private val db: RadioDatabase) : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
@@ -175,6 +183,44 @@ class MainViewModel(private val db: RadioDatabase) : ViewModel() {
         viewModelScope.launch {
             db.stationDao().getFilteredStations(country, language, keyword).collectLatest { stations ->
                 _uiState.value = _uiState.value.copy(previewStations = stations)
+            }
+        }
+    }
+
+    fun importFromDbFile(context: Context, uri: Uri) {
+        if (_uiState.value.isImporting) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value = _uiState.value.copy(isImporting = true)
+            try {
+                val tempFile = File(context.cacheDir, "imported_${System.currentTimeMillis()}.db")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tempFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                val importDb = Room.databaseBuilder(context, RadioDatabase::class.java, tempFile.absolutePath)
+                    .allowMainThreadQueries()
+                    .build()
+
+                try {
+                    val stations = importDb.stationDao().getStationsPage(Int.MAX_VALUE, 0)
+                    if (stations.isNotEmpty()) {
+                        repository.insertStations(stations)
+                        showToast("成功导入 ${stations.size} 条电台数据")
+                        refreshLocalDropdowns()
+                    } else {
+                        showToast("数据库文件中没有数据")
+                    }
+                } finally {
+                    importDb.close()
+                    tempFile.delete()
+                }
+            } catch (e: Exception) {
+                showToast("导入失败: ${e.message}")
+            } finally {
+                _uiState.value = _uiState.value.copy(isImporting = false)
             }
         }
     }
